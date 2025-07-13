@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Interactive Tesseract Demonstration</title>
+<style>
+    html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        background-color: black;
+        color: white;
+        font-family: 'Courier New', Courier, monospace;
+        overflow: hidden;
+    }
+    #canvas-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+    }
+    canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background-color: black;
+        cursor: grab;
+    }
+    canvas:active {
+        cursor: grabbing;
+    }
+    #toggle-controls-btn {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 20;
+        width: 50px;
+        height: 50px;
+        font-size: 24px;
+        background-color: rgba(34, 34, 34, 0.5);
+        color: #00ffff;
+        border: 1px solid #00ffff;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: background-color 0.3s, color 0.3s;
+        box-shadow: 0 0 10px #00ffff;
+    }
+    #toggle-controls-btn:hover {
+        background-color: #00ffff;
+        color: black;
+    }
+    #all-controls {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        max-height: 60%;
+        overflow-y: auto;
+        background-color: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+        padding: 20px;
+        box-sizing: border-box;
+        border-top: 1px solid #444;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+        z-index: 10;
+        transition: transform 0.5s ease-in-out;
+    }
+    #all-controls.hidden {
+        transform: translateY(100%);
+    }
+    .control-row, .control-category-container {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 20px;
+        align-items: center;
+        width: 100%;
+    }
+    .control-category-container.hidden {
+        display: none;
+    }
+    .slider-wrapper, .color-wrapper, .select-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+    }
+    .slider-wrapper { width: 220px; }
+    label { font-size: 1em; white-space: nowrap; }
+    button {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 1em;
+        color: #00ffff; background-color: #222;
+        border: 1px solid #00ffff; padding: 10px 20px;
+        cursor: pointer; border-radius: 5px;
+        box-shadow: 0 0 10px #00ffff;
+        transition: all 0.3s;
+    }
+    button.active, button:hover { background-color: #00ffff; color: black; }
+    
+    #fillButton { border-color: #FF00FF; color: #FF00FF; box-shadow: 0 0 10px #FF00FF; }
+    #fillButton:hover, #fillButton.active { background-color: #FF00FF; color: black; }
+    #shadowButton { border-color: #FF4500; color: #FF4500; box-shadow: 0 0 10px #FF4500; }
+    #shadowButton:hover, #shadowButton.active { background-color: #FF4500; color: black; }
+    #wallNumbersButton { border-color: #FFFF00; color: #FFFF00; box-shadow: 0 0 10px #FFFF00; }
+    #wallNumbersButton:hover, #wallNumbersButton.active { background-color: #FFFF00; color: black; }
+    #projectionsButton { border-color: #1E90FF; color: #1E90FF; box-shadow: 0 0 10px #1E90FF; }
+    #projectionsButton:hover, #projectionsButton.active { background-color: #1E90FF; color: black; }
+    #foldButton { border-color: #39FF14; color: #39FF14; box-shadow: 0 0 10px #39FF14; }
+    #foldButton:hover, #foldButton.active { background-color: #39FF14; color: black; }
+    #screenshotButton { border-color: #DA70D6; color: #DA70D6; box-shadow: 0 0 10px #DA70D6; }
+    #screenshotButton:hover, #screenshotButton.active { background-color: #DA70D6; color: black; }
+
+
+    select {
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 0.9em;
+        color: white; background-color: #222;
+        border: 1px solid #666; padding: 8px; border-radius: 5px;
+    }
+    input[type="color"] {
+        width: 60px; height: 30px; border: 1px solid #666;
+        cursor: pointer; background-color: transparent;
+    }
+    input[type="color"]::-webkit-color-swatch { border: none; border-radius: 4px; }
+    input[type="range"] {
+        -webkit-appearance: none; appearance: none;
+        width: 200px; height: 10px; background: #444;
+        border: 1px solid #666; border-radius: 5px;
+        outline: none; opacity: 0.8;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none; appearance: none;
+        width: 20px; height: 20px; background: #00ffff;
+        cursor: pointer; border-radius: 50%; border: none;
+        box-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff;
+    }
+</style>
+</head>
+<body>
+
+<div id="canvas-container">
+    <canvas id="tesseractCanvas"></canvas>
+</div>
+<button id="toggle-controls-btn" title="Toggle Controls">👁</button>
+
+<div id="all-controls">
+    <div class="control-row">
+        <button id="toggle-buttons-btn" class="active">Buttons</button>
+        <button id="toggle-appearance-btn" class="active">Appearance</button>
+        <button id="toggle-sliders-btn" class="active">Sliders</button>
+        <button id="toggle-interaction-btn" class="active">Interaction</button>
+        <button id="toggle-colors-btn" class="active">Wall Colors</button>
+    </div>
+
+    <div id="button-controls" class="control-category-container control-row">
+        <button id="fillButton" class="active">Toggle Fills</button>
+        <button id="shadowButton">Toggle Shadow</button>
+        <button id="wallNumbersButton">Toggle Wall Numbers</button>
+        <button id="projectionsButton">Toggle Projections</button>
+        <button id="foldButton">Start Animation</button>
+        <button id="screenshotButton">Save Screenshot</button>
+    </div>
+    
+    <div id="appearance-controls" class="control-category-container control-row">
+        <div class="color-wrapper"><label for="line-color">Line Color</label><input type="color" id="line-color" value="#FFFFFF"></div>
+        <div class="color-wrapper"><label for="shadow-color">Shadow Color</label><input type="color" id="shadow-color" value="#FF0000"></div>
+        <div class="slider-wrapper"><label for="line-thickness">Line Thickness</label><input type="range" min="1" max="10" value="2.5" step="0.1" id="line-thickness"></div>
+        <div class="slider-wrapper"><label for="shadow-thickness">Shadow Thickness</label><input type="range" min="1" max="10" value="2" step="0.1" id="shadow-thickness"></div>
+        <div class="slider-wrapper"><label for="shadow-smoothness">Shadow Smoothness</label><input type="range" min="0" max="50" value="15" step="1" id="shadow-smoothness"></div>
+    </div>
+    
+    <div id="slider-controls" class="control-category-container control-row slider-container">
+        <div class="slider-wrapper"><label for="xy-slider">XY</label><input type="range" min="0" max="6.28" value="0" step="0.01" id="xy-slider"></div>
+        <div class="slider-wrapper"><label for="xz-slider">XZ</label><input type="range" min="0" max="6.28" value="0" step="0.01" id="xz-slider"></div>
+        <div class="slider-wrapper"><label for="yz-slider">YZ</label><input type="range" min="0" max="6.28" value="0" step="0.01" id="yz-slider"></div>
+        <div class="slider-wrapper"><label for="xw-slider">XW</label><input type="range" min="0" max="6.28" value="0" step="0.01" id="xw-slider"></div>
+        <div class="slider-wrapper"><label for="yw-slider">YW</label><input type="range" min="0" max="6.28" value="0" step="0.01" id="yw-slider"></div>
+        <div class="slider-wrapper"><label for="zw-slider">ZW</label><input type="range" min="0" max="6.28" value="4.129" step="0.01" id="zw-slider"></div>
+        <div class="slider-wrapper"><label for="zoom-slider">Zoom</label><input type="range" min="50" max="800" value="425" step="1" id="zoom-slider"></div>
+    </div>
+
+    <div id="interaction-controls" class="control-category-container control-row">
+        <div class="select-wrapper">
+            <label for="preset-select">Visual Presets</label>
+            <select id="preset-select">
+                <option value="none">Select Preset...</option>
+                <option value="reset">Default State</option>
+                <option value="symmetrical_star">Symmetrical Star</option>
+                <option value="petrie_star">Petrie Polygon Star</option>
+                <option value="cube_in_cube">Cube-in-a-Cube</option>
+                <option value="cell_first">Cell-First View</option>
+                <option value="edge_first">Edge-First View</option>
+            </select>
+        </div>
+        <div class="select-wrapper"><label for="x-drag-select">Horizontal Drag</label><select id="x-drag-select"><option value="xy">XY</option><option value="xz" selected>XZ</option><option value="yz">YZ</option><option value="xw">XW</option><option value="yw">YW</option><option value="zw">ZW</option></select></div>
+        <div class="select-wrapper"><label for="y-drag-select">Vertical Drag</label><select id="y-drag-select"><option value="xy">XY</option><option value="xz">XZ</option><option value="yz" selected>YZ</option><option value="xw">XW</option><option value="yw">YW</option><option value="zw">ZW</option></select></div>
+        <div class="select-wrapper"><label for="scroll-select">Scroll Wheel</label><select id="scroll-select"><option value="zoom" selected>Zoom</option><option value="xy">XY</option><option value="xz">XZ</option><option value="yz">YZ</option><option value="xw">XW</option><option value="yw">YW</option><option value="zw">ZW</option></select></div>
+    </div>
+    
+    <div id="color-controls" class="control-category-container control-row">
+        <!-- Wall color pickers will be generated by script -->
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('tesseractCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // --- STATE AND CONTROLS ---
+    const sliders = { xy: document.getElementById('xy-slider'), xz: document.getElementById('xz-slider'), xw: document.getElementById('xw-slider'), yz: document.getElementById('yz-slider'), yw: document.getElementById('yw-slider'), zw: document.getElementById('zw-slider'), zoom: document.getElementById('zoom-slider') };
+    const appearanceSliders = { lineThickness: document.getElementById('line-thickness'), shadowThickness: document.getElementById('shadow-thickness'), shadowSmoothness: document.getElementById('shadow-smoothness')};
+    const appearanceColors = { line: document.getElementById('line-color'), shadow: document.getElementById('shadow-color')};
+    
+    const fillButton = document.getElementById('fillButton');
+    const shadowButton = document.getElementById('shadowButton');
+    const wallNumbersButton = document.getElementById('wallNumbersButton');
+    const projectionsButton = document.getElementById('projectionsButton');
+    const foldButton = document.getElementById('foldButton');
+    const screenshotButton = document.getElementById('screenshotButton');
+    const toggleControlsBtn = document.getElementById('toggle-controls-btn');
+    const controlsPanel = document.getElementById('all-controls');
+    const xDragSelect = document.getElementById('x-drag-select');
+    const yDragSelect = document.getElementById('y-drag-select');
+    const scrollSelect = document.getElementById('scroll-select');
+    const presetSelect = document.getElementById('preset-select');
+    const colorControlsContainer = document.getElementById('color-controls');
+    const wallColorPickers = [];
+
+    const categoryToggles = {
+        buttons: { btn: document.getElementById('toggle-buttons-btn'), container: document.getElementById('button-controls') },
+        appearance: { btn: document.getElementById('toggle-appearance-btn'), container: document.getElementById('appearance-controls') },
+        sliders: { btn: document.getElementById('toggle-sliders-btn'), container: document.getElementById('slider-controls') },
+        interaction: { btn: document.getElementById('toggle-interaction-btn'), container: document.getElementById('interaction-controls') },
+        colors: { btn: document.getElementById('toggle-colors-btn'), container: colorControlsContainer }
+    };
+
+    const defaultWallColors = ['#FF00FF','#FF00FF','#00FFFF','#00FFFF','#FFFF00','#FFFF00','#FF007F','#FF007F','#7F00FF','#7F00FF','#00FF7F','#00FF7F','#FF8C00','#FF8C00','#39FF14','#39FF14','#FF4500','#FF4500','#1E90FF','#1E90FF','#ADFF2F','#ADFF2F','#DA70D6','#DA70D6'];
+    for(let i = 0; i < 24; i++) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'color-wrapper';
+        const label = document.createElement('label');
+        label.textContent = `Wall ${i + 1}`;
+        const picker = document.createElement('input');
+        picker.type = 'color';
+        picker.id = `wall${i}-color`;
+        picker.value = defaultWallColors[i];
+        wrapper.appendChild(label);
+        wrapper.appendChild(picker);
+        colorControlsContainer.appendChild(wrapper);
+        wallColorPickers.push(picker);
+    }
+
+    let fillFaces = true, showShadow = false, showWallNumbers = false, showProjections = false, isDragging = false;
+    let lastX = 0, lastY = 0;
+    const PI2 = Math.PI * 2;
+    let isAnimating = false, animationProgress = 0, animationDirection = 1, storedAngles = {};
+
+    const points = Array.from({length: 16}, (_, i) => ({ x: (i & 1 ? 1 : -1), y: (i & 2 ? 1 : -1), z: (i & 4 ? 1 : -1), w: (i & 8 ? 1 : -1) }));
+    const edges = [ [0,1],[0,2],[0,4],[0,8],[1,3],[1,5],[1,9],[2,3],[2,6],[2,10],[3,7],[3,11],[4,5],[4,6],[4,12],[5,7],[5,13],[6,7],[6,14],[7,15],[8,9],[8,10],[8,12],[9,11],[9,13],[10,11],[10,14],[11,15],[12,13],[12,14],[13,15],[14,15] ];
+    const faces = [ [0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5],[8,9,11,10],[12,13,15,14],[8,9,13,12],[10,11,15,14],[8,10,14,12],[9,11,15,13],[0,1,9,8],[2,3,11,10],[4,5,13,12],[6,7,15,14],[0,2,10,8],[1,3,11,9],[4,6,14,12],[5,7,15,13],[0,4,12,8],[1,5,13,9],[2,6,14,10],[3,7,15,11] ];
+
+    fillButton.addEventListener('click', () => { fillFaces = !fillFaces; fillButton.classList.toggle('active'); });
+    shadowButton.addEventListener('click', () => { showShadow = !showShadow; shadowButton.classList.toggle('active'); });
+    wallNumbersButton.addEventListener('click', () => { showWallNumbers = !showWallNumbers; wallNumbersButton.classList.toggle('active'); });
+    projectionsButton.addEventListener('click', () => { showProjections = !showProjections; projectionsButton.classList.toggle('active'); });
+    toggleControlsBtn.addEventListener('click', () => controlsPanel.classList.toggle('hidden'));
+    
+    foldButton.addEventListener('click', () => {
+        if (isAnimating) return;
+        isAnimating = true;
+        animationDirection = (animationProgress < 2) ? 1 : -1;
+        if (animationDirection === 1) { // Starting unfold animation
+            Object.keys(sliders).forEach(key => storedAngles[key] = sliders[key].value);
+            Object.values(sliders).forEach(s => s.value = 0); // Zero out rotations for clean view
+            sliders.xw.value = 0.436; // ~25 degrees
+            sliders.yw.value = 0.262; // ~15 degrees
+        }
+    });
+
+    screenshotButton.addEventListener('click', () => {
+        const wasHidden = controlsPanel.classList.contains('hidden');
+        controlsPanel.classList.add('hidden');
+        toggleControlsBtn.style.display = 'none';
+        requestAnimationFrame(() => {
+            draw(true); 
+            const image = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.href = image;
+            link.download = 'tesseract_screenshot.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            if (!wasHidden) { controlsPanel.classList.remove('hidden'); }
+            toggleControlsBtn.style.display = 'block';
+            requestAnimationFrame(() => draw(false));
+        });
+    });
+
+    Object.values(categoryToggles).forEach(toggle => {
+        toggle.btn.addEventListener('click', () => {
+            toggle.container.classList.toggle('hidden');
+            toggle.btn.classList.toggle('active');
+        });
+    });
+    
+    presetSelect.addEventListener('change', (e) => {
+        const preset = e.target.value;
+        if (preset === 'none') return;
+        Object.values(sliders).forEach(s => { if(s.id !== 'zoom-slider') s.value=0; });
+        const degToRad = Math.PI / 180;
+        switch(preset) {
+            case 'reset': sliders.zw.value = 4.129; sliders.zoom.value = 425; break;
+            case 'symmetrical_star': sliders.xy.value = 45 * degToRad; sliders.zw.value = 45 * degToRad; sliders.yz.value = 45 * degToRad; sliders.xw.value = 45 * degToRad; break;
+            case 'petrie_star': sliders.xy.value = 45 * degToRad; sliders.zw.value = 45 * degToRad; break;
+            case 'cube_in_cube': sliders.xw.value = 25 * degToRad; break;
+            case 'cell_first': sliders.xw.value = 90 * degToRad; break;
+            case 'edge_first': sliders.xz.value = 45 * degToRad; sliders.xw.value = 45 * degToRad; break;
+        }
+        e.target.value = 'none';
+    });
+
+
+    function handleDragStart(x, y) { if(!isAnimating) { isDragging = true; lastX = x; lastY = y; } }
+    function handleDragMove(x, y) {
+        if (!isDragging || isAnimating) return;
+        const dx = x - lastX, dy = y - lastY, sensitivity = 0.01;
+        const xDim = xDragSelect.value, yDim = yDragSelect.value;
+        let newXAngle = (parseFloat(sliders[xDim].value) + dx * sensitivity) % PI2;
+        let newYAngle = (parseFloat(sliders[yDim].value) + dy * sensitivity) % PI2;
+        sliders[xDim].value = newXAngle < 0 ? newXAngle + PI2 : newXAngle;
+        sliders[yDim].value = newYAngle < 0 ? newYAngle + PI2 : newYAngle;
+        lastX = x; lastY = y;
+    }
+    function handleDragEnd() { isDragging = false; }
+    
+    function handleScroll(e) {
+        if(isAnimating) return;
+        e.preventDefault();
+        const scrollDim = scrollSelect.value;
+        const delta = e.deltaY > 0 ? -1 : 1;
+        if (scrollDim === 'zoom') {
+            sliders.zoom.value = Math.max(50, Math.min(800, parseFloat(sliders.zoom.value) + delta * 15));
+        } else {
+            let newAngle = (parseFloat(sliders[scrollDim].value) + delta * 0.1) % PI2;
+            sliders[scrollDim].value = newAngle < 0 ? newAngle + PI2 : newAngle;
+        }
+    }
+
+    canvas.addEventListener('mousedown', e => handleDragStart(e.clientX, e.clientY));
+    canvas.addEventListener('mousemove', e => handleDragMove(e.clientX, e.clientY));
+    canvas.addEventListener('mouseup', handleDragEnd);
+    canvas.addEventListener('mouseleave', handleDragEnd);
+    canvas.addEventListener('touchstart', e => { e.preventDefault(); handleDragStart(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+    canvas.addEventListener('touchmove', e => { e.preventDefault(); handleDragMove(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+    canvas.addEventListener('touchend', handleDragEnd);
+    canvas.addEventListener('touchcancel', handleDragEnd);
+    canvas.addEventListener('wheel', handleScroll, { passive: false });
+
+    function resizeCanvas() {
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = canvas.clientWidth * dpr;
+        canvas.height = canvas.clientHeight * dpr;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function rotate(point, angle, axis1, axis2) {
+        const c = Math.cos(angle), s = Math.sin(angle), p1 = point[axis1], p2 = point[axis2];
+        point[axis1] = p1 * c - p2 * s;
+        point[axis2] = p1 * s + p2 * c;
+    }
+    
+    function project(point, scale, w, h) {
+        const distance = 4;
+        const w_persp = 1 / (distance - point.w);
+        const p3d = { x: point.x * w_persp, y: point.y * w_persp, z: point.z * w_persp };
+        const z_persp = 1.5, factor = 1 / (z_persp - p3d.z);
+        return { x: p3d.x * factor * scale + w / 2, y: p3d.y * factor * scale + h / 2 };
+    }
+    
+    function projectOrtho(point, scale, w, h, axis1, axis2) {
+        return {
+            x: point[axis1] * scale + w / 2,
+            y: point[axis2] * scale + h / 2
+        };
+    }
+
+    function renderTesseract(target, rotatedPoints) {
+        const dpr = window.devicePixelRatio || 1;
+        const projectionFn = target.projectionFn;
+        const projArgs = target.projArgs || [];
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(target.x, target.y, target.w, target.h);
+        ctx.clip();
+        ctx.translate(target.x, target.y);
+
+        const facesWithDepth = faces.map((face, index) => ({
+            index: index,
+            depth: (rotatedPoints[face[0]].w + rotatedPoints[face[1]].w + rotatedPoints[face[2]].w + rotatedPoints[face[3]].w) / 4,
+            points: face.map(vIndex => projectionFn(rotatedPoints[vIndex], target.scale, target.w, target.h, ...projArgs))
+        }));
+        facesWithDepth.sort((a, b) => b.depth - a.depth);
+
+        if (fillFaces) {
+            const dynamicFaceColors = wallColorPickers.map(picker => picker.value);
+            ctx.globalAlpha = 0.6;
+            facesWithDepth.forEach(faceData => {
+                ctx.fillStyle = dynamicFaceColors[faceData.index];
+                ctx.beginPath();
+                ctx.moveTo(faceData.points[0].x, faceData.points[0].y);
+                for (let i = 1; i < 4; i++) ctx.lineTo(faceData.points[i].x, faceData.points[i].y);
+                ctx.closePath();
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1.0;
+        }
+        
+        if (showWallNumbers) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = `${14 * dpr}px "Courier New"`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = '#000000';
+            ctx.shadowBlur = 5;
+            facesWithDepth.forEach(faceData => {
+                const centerX = (faceData.points[0].x + faceData.points[1].x + faceData.points[2].x + faceData.points[3].x) / 4;
+                const centerY = (faceData.points[0].y + faceData.points[1].y + faceData.points[2].y + faceData.points[3].y) / 4;
+                ctx.fillText(faceData.index + 1, centerX, centerY);
+            });
+            ctx.shadowBlur = 0;
+        }
+
+        const projectedPoints = rotatedPoints.map(p => projectionFn(p, target.scale, target.w, target.h, ...projArgs));
+
+        if (showShadow) {
+            ctx.lineWidth = parseFloat(appearanceSliders.shadowThickness.value) * dpr;
+            ctx.strokeStyle = appearanceColors.shadow.value;
+            ctx.shadowColor = appearanceColors.shadow.value;
+            ctx.shadowBlur = parseFloat(appearanceSliders.shadowSmoothness.value);
+            edges.forEach(edge => {
+                const p1 = projectedPoints[edge[0]], p2 = projectedPoints[edge[1]];
+                ctx.beginPath();
+                ctx.moveTo(p1.x + 10, p1.y + 10);
+                ctx.lineTo(p2.x + 10, p2.y + 10);
+                ctx.stroke();
+            });
+        }
+
+        ctx.lineWidth = parseFloat(appearanceSliders.lineThickness.value) * dpr;
+        ctx.strokeStyle = appearanceColors.line.value;
+        ctx.shadowColor = appearanceColors.line.value;
+        ctx.shadowBlur = 20;
+        edges.forEach(edge => {
+            const p1 = projectedPoints[edge[0]], p2 = projectedPoints[edge[1]];
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        });
+        
+        ctx.restore();
+    }
+    
+    const cubeNetMap = [
+        { face: 'z', dir: -1, pivotAxis: 'y', pivotEdge: -1 }, // back
+        { face: 'x', dir: 1,  pivotAxis: 'z', pivotEdge: 1 },  // right
+        { face: 'x', dir: -1, pivotAxis: 'z', pivotEdge: -1 }, // left
+        { face: 'z', dir: 1,  pivotAxis: 'y', pivotEdge: 1 },  // front
+        { face: 'y', dir: 1,  pivotAxis: 'x', pivotEdge: 1 },  // top
+        { face: 'y', dir: -1, pivotAxis: 'x', pivotEdge: -1 }  // bottom
+    ];
+
+    function draw(stopLoopAfterThisFrame = false) {
+        if(isAnimating) {
+            animationProgress += 0.005 * animationDirection;
+            if (animationProgress >= 2) {
+                animationProgress = 2;
+                isAnimating = false;
+                foldButton.textContent = "Fold";
+                Object.keys(storedAngles).forEach(key => sliders[key].value = storedAngles[key]); // Restore
+            }
+            if (animationProgress <= 0) {
+                animationProgress = 0;
+                isAnimating = false;
+                foldButton.textContent = "Unfold";
+            }
+        }
+        
+        const progressStage1 = Math.min(1, animationProgress);
+        const progressStage2 = Math.max(0, animationProgress - 1);
+        const easedProgress1 = (1 - Math.cos(progressStage1 * Math.PI)) / 2; // Cube folding
+        const easedProgress2 = (1 - Math.cos(progressStage2 * Math.PI)) / 2; // Tesseract folding
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const scale = parseFloat(sliders.zoom.value) * (canvas.height / 800);
+        const angles = isAnimating ? { xw: 0.436, yw: 0.262, xy:0, xz:0, yz:0, zw:0 } : { xy: parseFloat(sliders.xy.value), xz: parseFloat(sliders.xz.value), xw: parseFloat(sliders.xw.value), yz: parseFloat(sliders.yz.value), yw: parseFloat(sliders.yw.value), zw: parseFloat(sliders.zw.value) };
+
+        const animatedPoints = points.map(p => {
+            let transformed = { ...p };
+
+            // Stage 2: 4D to 3D folding (done first in reverse logic)
+            const angle4D = (Math.PI/2) * (1 - easedProgress2);
+            if (transformed.x === 1) rotate(transformed, angle4D, 'x', 'w');
+            if (transformed.x === -1) rotate(transformed, -angle4D, 'x', 'w');
+            if (transformed.y === 1) rotate(transformed, angle4D, 'y', 'w');
+            if (transformed.y === -1) rotate(transformed, -angle4D, 'y', 'w');
+            if (transformed.z === 1) rotate(transformed, angle4D, 'z', 'w');
+            if (transformed.z === -1) rotate(transformed, -angle4D, 'z', 'w');
+            
+            // Stage 1: 3D to 2D folding
+            const angle3D = (Math.PI/2) * (1 - easedProgress1);
+            cubeNetMap.forEach(map => {
+                if (transformed[map.face] === map.dir) {
+                     rotate(transformed, map.pivotEdge * angle3D, map.pivotAxis, map.face);
+                }
+            });
+
+            return transformed;
+        });
+
+        const rotatedPoints = animatedPoints.map(p => {
+            const p_copy = {...p};
+            rotate(p_copy, angles.xy, 'x', 'y'); rotate(p_copy, angles.xz, 'x', 'z'); rotate(p_copy, angles.yz, 'y', 'z');
+            rotate(p_copy, angles.xw, 'x', 'w'); rotate(p_copy, angles.yw, 'y', 'w'); rotate(p_copy, angles.zw, 'z', 'w');
+            return p_copy;
+        });
+        
+        if (showProjections) {
+            const halfW = canvas.width / 2;
+            const halfH = canvas.height / 2;
+            const orthoScale = scale * 0.75;
+            renderTesseract({x: 0, y: 0, w: halfW, h: halfH, scale: scale, projectionFn: project}, rotatedPoints);
+            renderTesseract({x: halfW, y: 0, w: halfW, h: halfH, scale: orthoScale, projectionFn: projectOrtho, projArgs: ['z', 'y']}, rotatedPoints);
+            renderTesseract({x: 0, y: halfH, w: halfW, h: halfH, scale: orthoScale, projectionFn: projectOrtho, projArgs: ['x', 'z']}, rotatedPoints);
+            
+            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(halfW, 0); ctx.lineTo(halfW, canvas.height);
+            ctx.moveTo(0, halfH); ctx.lineTo(canvas.width, halfH);
+            ctx.stroke();
+
+        } else {
+            renderTesseract({x: 0, y: 0, w: canvas.width, h: canvas.height, scale: scale, projectionFn: project}, rotatedPoints);
+        }
+
+        if (!stopLoopAfterThisFrame && !isAnimating) {
+            const dpr = window.devicePixelRatio || 1;
+            ctx.fillStyle = '#FFFFFF'; ctx.font = `${16 * dpr}px "Courier New"`; ctx.textAlign = 'left'; ctx.shadowColor = '#FFFFFF'; ctx.shadowBlur = 7;
+            const radToDeg = 180 / Math.PI;
+            const rotationInfo = [ `XY: ${(angles.xy * radToDeg).toFixed(1)}°`, `XZ: ${(angles.xz * radToDeg).toFixed(1)}°`, `YZ: ${(angles.yz * radToDeg).toFixed(1)}°`, `XW: ${(angles.xw * radToDeg).toFixed(1)}°`, `YW: ${(angles.yw * radToDeg).toFixed(1)}°`, `ZW: ${(angles.zw * radToDeg).toFixed(1)}°`, ];
+            rotationInfo.forEach((text, i) => { ctx.fillText(text, 15, 25 + (i * 20 * dpr)); });
+        } else if(stopLoopAfterThisFrame) {
+             const dpr = window.devicePixelRatio || 1;
+            ctx.fillStyle = '#FFFFFF'; ctx.font = `${16 * dpr}px "Courier New"`; ctx.textAlign = 'left'; ctx.shadowColor = '#FFFFFF'; ctx.shadowBlur = 7;
+            const radToDeg = 180 / Math.PI;
+            const rotationInfo = [ `XY: ${(angles.xy * radToDeg).toFixed(1)}°`, `XZ: ${(angles.xz * radToDeg).toFixed(1)}°`, `YZ: ${(angles.yz * radToDeg).toFixed(1)}°`, `XW: ${(angles.xw * radToDeg).toFixed(1)}°`, `YW: ${(angles.yw * radToDeg).toFixed(1)}°`, `ZW: ${(angles.zw * radToDeg).toFixed(1)}°`, ];
+            rotationInfo.forEach((text, i) => { ctx.fillText(text, 15, 25 + (i * 20 * dpr)); });
+        }
+        
+        if(!stopLoopAfterThisFrame) {
+             requestAnimationFrame(() => draw(false));
+        }
+    }
+
+    draw(false);
+</script>
+
+</body>
+</html>```
