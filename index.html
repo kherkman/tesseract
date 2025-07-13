@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Interactive Tesseract Demonstration</title>
+<title>Interactive Tesseract & Cube Demonstration</title>
 <style>
     html, body {
         height: 100%;
@@ -100,7 +100,14 @@
         box-shadow: 0 0 10px #00ffff;
         transition: all 0.3s;
     }
-    button.active, button:hover { background-color: #00ffff; color: black; }
+    button:disabled {
+        color: #555;
+        border-color: #555;
+        box-shadow: none;
+        cursor: not-allowed;
+        background-color: #111;
+    }
+    button.active, button:hover:not(:disabled) { background-color: #00ffff; color: black; }
     
     #fillButton { border-color: #FF00FF; color: #FF00FF; box-shadow: 0 0 10px #FF00FF; }
     #fillButton:hover, #fillButton.active { background-color: #FF00FF; color: black; }
@@ -109,9 +116,7 @@
     #wallNumbersButton { border-color: #FFFF00; color: #FFFF00; box-shadow: 0 0 10px #FFFF00; }
     #wallNumbersButton:hover, #wallNumbersButton.active { background-color: #FFFF00; color: black; }
     #projectionsButton { border-color: #1E90FF; color: #1E90FF; box-shadow: 0 0 10px #1E90FF; }
-    #projectionsButton:hover, #projectionsButton.active { background-color: #1E90FF; color: black; }
-    #foldButton { border-color: #39FF14; color: #39FF14; box-shadow: 0 0 10px #39FF14; }
-    #foldButton:hover, #foldButton.active { background-color: #39FF14; color: black; }
+    #projectionsButton:hover:not(:disabled), #projectionsButton.active { background-color: #1E90FF; color: black; }
     #screenshotButton { border-color: #DA70D6; color: #DA70D6; box-shadow: 0 0 10px #DA70D6; }
     #screenshotButton:hover, #screenshotButton.active { background-color: #DA70D6; color: black; }
 
@@ -121,6 +126,11 @@
         font-size: 0.9em;
         color: white; background-color: #222;
         border: 1px solid #666; padding: 8px; border-radius: 5px;
+    }
+    select:disabled {
+         color: #555;
+         cursor: not-allowed;
+         background-color: #111;
     }
     input[type="color"] {
         width: 60px; height: 30px; border: 1px solid #666;
@@ -133,6 +143,10 @@
         border: 1px solid #666; border-radius: 5px;
         outline: none; opacity: 0.8;
     }
+     input[type="range"]:disabled::-webkit-slider-thumb {
+        background: #555;
+        box-shadow: none;
+     }
     input[type="range"]::-webkit-slider-thumb {
         -webkit-appearance: none; appearance: none;
         width: 20px; height: 20px; background: #00ffff;
@@ -162,7 +176,6 @@
         <button id="shadowButton">Toggle Shadow</button>
         <button id="wallNumbersButton">Toggle Wall Numbers</button>
         <button id="projectionsButton">Toggle Projections</button>
-        <button id="foldButton">Start Animation</button>
         <button id="screenshotButton">Save Screenshot</button>
     </div>
     
@@ -180,11 +193,18 @@
         <div class="slider-wrapper"><label for="yz-slider">YZ</label><input type="range" min="0" max="6.28" value="0" step="0.01" id="yz-slider"></div>
         <div class="slider-wrapper"><label for="xw-slider">XW</label><input type="range" min="0" max="6.28" value="0" step="0.01" id="xw-slider"></div>
         <div class="slider-wrapper"><label for="yw-slider">YW</label><input type="range" min="0" max="6.28" value="0" step="0.01" id="yw-slider"></div>
-        <div class="slider-wrapper"><label for="zw-slider">ZW</label><input type="range" min="0" max="6.28" value="4.129" step="0.01" id="zw-slider"></div>
+        <div class="slider-wrapper"><label for="zw-slider">ZW</label><input type="range" min="0" max="6.28" value="1.0" step="0.01" id="zw-slider"></div>
         <div class="slider-wrapper"><label for="zoom-slider">Zoom</label><input type="range" min="50" max="800" value="425" step="1" id="zoom-slider"></div>
     </div>
 
     <div id="interaction-controls" class="control-category-container control-row">
+        <div class="select-wrapper">
+            <label for="shape-select">Shape</label>
+            <select id="shape-select">
+                <option value="tesseract" selected>Tesseract</option>
+                <option value="cube">Cube</option>
+            </select>
+        </div>
         <div class="select-wrapper">
             <label for="preset-select">Visual Presets</label>
             <select id="preset-select">
@@ -220,13 +240,13 @@
     const shadowButton = document.getElementById('shadowButton');
     const wallNumbersButton = document.getElementById('wallNumbersButton');
     const projectionsButton = document.getElementById('projectionsButton');
-    const foldButton = document.getElementById('foldButton');
     const screenshotButton = document.getElementById('screenshotButton');
     const toggleControlsBtn = document.getElementById('toggle-controls-btn');
     const controlsPanel = document.getElementById('all-controls');
     const xDragSelect = document.getElementById('x-drag-select');
     const yDragSelect = document.getElementById('y-drag-select');
     const scrollSelect = document.getElementById('scroll-select');
+    const shapeSelect = document.getElementById('shape-select');
     const presetSelect = document.getElementById('preset-select');
     const colorControlsContainer = document.getElementById('color-controls');
     const wallColorPickers = [];
@@ -252,17 +272,21 @@
         wrapper.appendChild(label);
         wrapper.appendChild(picker);
         colorControlsContainer.appendChild(wrapper);
-        wallColorPickers.push(picker);
+        wallColorPickers.push(wrapper);
     }
 
     let fillFaces = true, showShadow = false, showWallNumbers = false, showProjections = false, isDragging = false;
     let lastX = 0, lastY = 0;
     const PI2 = Math.PI * 2;
-    let isAnimating = false, animationProgress = 0, animationDirection = 1, storedAngles = {};
 
-    const points = Array.from({length: 16}, (_, i) => ({ x: (i & 1 ? 1 : -1), y: (i & 2 ? 1 : -1), z: (i & 4 ? 1 : -1), w: (i & 8 ? 1 : -1) }));
-    const edges = [ [0,1],[0,2],[0,4],[0,8],[1,3],[1,5],[1,9],[2,3],[2,6],[2,10],[3,7],[3,11],[4,5],[4,6],[4,12],[5,7],[5,13],[6,7],[6,14],[7,15],[8,9],[8,10],[8,12],[9,11],[9,13],[10,11],[10,14],[11,15],[12,13],[12,14],[13,15],[14,15] ];
-    const faces = [ [0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5],[8,9,11,10],[12,13,15,14],[8,9,13,12],[10,11,15,14],[8,10,14,12],[9,11,15,13],[0,1,9,8],[2,3,11,10],[4,5,13,12],[6,7,15,14],[0,2,10,8],[1,3,11,9],[4,6,14,12],[5,7,15,13],[0,4,12,8],[1,5,13,9],[2,6,14,10],[3,7,15,11] ];
+    const tesseract_points = Array.from({length: 16}, (_, i) => ({ x: (i & 1 ? 1 : -1), y: (i & 2 ? 1 : -1), z: (i & 4 ? 1 : -1), w: (i & 8 ? 1 : -1) }));
+    const tesseract_edges = [ [0,1],[0,2],[0,4],[0,8],[1,3],[1,5],[1,9],[2,3],[2,6],[2,10],[3,7],[3,11],[4,5],[4,6],[4,12],[5,7],[5,13],[6,7],[6,14],[7,15],[8,9],[8,10],[8,12],[9,11],[9,13],[10,11],[10,14],[11,15],[12,13],[12,14],[13,15],[14,15] ];
+    const tesseract_faces = [ [0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5],[8,9,11,10],[12,13,15,14],[8,9,13,12],[10,11,15,14],[8,10,14,12],[9,11,15,13],[0,1,9,8],[2,3,11,10],[4,5,13,12],[6,7,15,14],[0,2,10,8],[1,3,11,9],[4,6,14,12],[5,7,15,13],[0,4,12,8],[1,5,13,9],[2,6,14,10],[3,7,15,11] ];
+
+    const cube_points = Array.from({length: 8}, (_, i) => ({ x: (i & 1 ? 1 : -1), y: (i & 2 ? 1 : -1), z: (i & 4 ? 1 : -1), w: 0 }));
+    const cube_edges = [ [0,1],[0,2],[0,4],[1,3],[1,5],[2,3],[2,6],[3,7],[4,5],[4,6],[5,7],[6,7] ];
+    const cube_faces = [ [0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5] ];
+
 
     fillButton.addEventListener('click', () => { fillFaces = !fillFaces; fillButton.classList.toggle('active'); });
     shadowButton.addEventListener('click', () => { showShadow = !showShadow; shadowButton.classList.toggle('active'); });
@@ -270,18 +294,6 @@
     projectionsButton.addEventListener('click', () => { showProjections = !showProjections; projectionsButton.classList.toggle('active'); });
     toggleControlsBtn.addEventListener('click', () => controlsPanel.classList.toggle('hidden'));
     
-    foldButton.addEventListener('click', () => {
-        if (isAnimating) return;
-        isAnimating = true;
-        animationDirection = (animationProgress < 2) ? 1 : -1;
-        if (animationDirection === 1) { // Starting unfold animation
-            Object.keys(sliders).forEach(key => storedAngles[key] = sliders[key].value);
-            Object.values(sliders).forEach(s => s.value = 0); // Zero out rotations for clean view
-            sliders.xw.value = 0.436; // ~25 degrees
-            sliders.yw.value = 0.262; // ~15 degrees
-        }
-    });
-
     screenshotButton.addEventListener('click', () => {
         const wasHidden = controlsPanel.classList.contains('hidden');
         controlsPanel.classList.add('hidden');
@@ -314,7 +326,7 @@
         Object.values(sliders).forEach(s => { if(s.id !== 'zoom-slider') s.value=0; });
         const degToRad = Math.PI / 180;
         switch(preset) {
-            case 'reset': sliders.zw.value = 4.129; sliders.zoom.value = 425; break;
+            case 'reset': sliders.zw.value = 1.0; sliders.zoom.value = 425; break;
             case 'symmetrical_star': sliders.xy.value = 45 * degToRad; sliders.zw.value = 45 * degToRad; sliders.yz.value = 45 * degToRad; sliders.xw.value = 45 * degToRad; break;
             case 'petrie_star': sliders.xy.value = 45 * degToRad; sliders.zw.value = 45 * degToRad; break;
             case 'cube_in_cube': sliders.xw.value = 25 * degToRad; break;
@@ -324,10 +336,25 @@
         e.target.value = 'none';
     });
 
+    shapeSelect.addEventListener('change', (e) => {
+        const shape = e.target.value;
+        const isTesseract = shape === 'tesseract';
+        
+        sliders.xw.disabled = !isTesseract;
+        sliders.yw.disabled = !isTesseract;
+        sliders.zw.disabled = !isTesseract;
+        projectionsButton.disabled = !isTesseract;
+        presetSelect.disabled = !isTesseract;
+        
+        wallColorPickers.forEach((picker, i) => {
+            picker.style.display = (isTesseract || i < 6) ? 'flex' : 'none';
+        });
+    });
 
-    function handleDragStart(x, y) { if(!isAnimating) { isDragging = true; lastX = x; lastY = y; } }
+
+    function handleDragStart(x, y) { isDragging = true; lastX = x; lastY = y; }
     function handleDragMove(x, y) {
-        if (!isDragging || isAnimating) return;
+        if (!isDragging) return;
         const dx = x - lastX, dy = y - lastY, sensitivity = 0.01;
         const xDim = xDragSelect.value, yDim = yDragSelect.value;
         let newXAngle = (parseFloat(sliders[xDim].value) + dx * sensitivity) % PI2;
@@ -339,7 +366,6 @@
     function handleDragEnd() { isDragging = false; }
     
     function handleScroll(e) {
-        if(isAnimating) return;
         e.preventDefault();
         const scrollDim = scrollSelect.value;
         const delta = e.deltaY > 0 ? -1 : 1;
@@ -390,7 +416,7 @@
         };
     }
 
-    function renderTesseract(target, rotatedPoints) {
+    function renderShape(target, rotatedPoints, currentFaces) {
         const dpr = window.devicePixelRatio || 1;
         const projectionFn = target.projectionFn;
         const projArgs = target.projArgs || [];
@@ -401,15 +427,15 @@
         ctx.clip();
         ctx.translate(target.x, target.y);
 
-        const facesWithDepth = faces.map((face, index) => ({
+        const facesWithDepth = currentFaces.map((face, index) => ({
             index: index,
-            depth: (rotatedPoints[face[0]].w + rotatedPoints[face[1]].w + rotatedPoints[face[2]].w + rotatedPoints[face[3]].w) / 4,
+            depth: (rotatedPoints[face[0]]?.w || 0) + (rotatedPoints[face[1]]?.w || 0) + (rotatedPoints[face[2]]?.w || 0) + (rotatedPoints[face[3]]?.w || 0),
             points: face.map(vIndex => projectionFn(rotatedPoints[vIndex], target.scale, target.w, target.h, ...projArgs))
         }));
         facesWithDepth.sort((a, b) => b.depth - a.depth);
 
         if (fillFaces) {
-            const dynamicFaceColors = wallColorPickers.map(picker => picker.value);
+            const dynamicFaceColors = wallColorPickers.map(picker => picker.querySelector('input').value);
             ctx.globalAlpha = 0.6;
             facesWithDepth.forEach(faceData => {
                 ctx.fillStyle = dynamicFaceColors[faceData.index];
@@ -436,7 +462,8 @@
             });
             ctx.shadowBlur = 0;
         }
-
+        
+        const currentEdges = shapeSelect.value === 'tesseract' ? tesseract_edges : cube_edges;
         const projectedPoints = rotatedPoints.map(p => projectionFn(p, target.scale, target.w, target.h, ...projArgs));
 
         if (showShadow) {
@@ -444,7 +471,7 @@
             ctx.strokeStyle = appearanceColors.shadow.value;
             ctx.shadowColor = appearanceColors.shadow.value;
             ctx.shadowBlur = parseFloat(appearanceSliders.shadowSmoothness.value);
-            edges.forEach(edge => {
+            currentEdges.forEach(edge => {
                 const p1 = projectedPoints[edge[0]], p2 = projectedPoints[edge[1]];
                 ctx.beginPath();
                 ctx.moveTo(p1.x + 10, p1.y + 10);
@@ -457,7 +484,7 @@
         ctx.strokeStyle = appearanceColors.line.value;
         ctx.shadowColor = appearanceColors.line.value;
         ctx.shadowBlur = 20;
-        edges.forEach(edge => {
+        currentEdges.forEach(edge => {
             const p1 = projectedPoints[edge[0]], p2 = projectedPoints[edge[1]];
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
@@ -468,100 +495,62 @@
         ctx.restore();
     }
     
-    const cubeNetMap = [
-        { face: 'z', dir: -1, pivotAxis: 'y', pivotEdge: -1 }, // back
-        { face: 'x', dir: 1,  pivotAxis: 'z', pivotEdge: 1 },  // right
-        { face: 'x', dir: -1, pivotAxis: 'z', pivotEdge: -1 }, // left
-        { face: 'z', dir: 1,  pivotAxis: 'y', pivotEdge: 1 },  // front
-        { face: 'y', dir: 1,  pivotAxis: 'x', pivotEdge: 1 },  // top
-        { face: 'y', dir: -1, pivotAxis: 'x', pivotEdge: -1 }  // bottom
-    ];
-
     function draw(stopLoopAfterThisFrame = false) {
-        if(isAnimating) {
-            animationProgress += 0.005 * animationDirection;
-            if (animationProgress >= 2) {
-                animationProgress = 2;
-                isAnimating = false;
-                foldButton.textContent = "Fold";
-                Object.keys(storedAngles).forEach(key => sliders[key].value = storedAngles[key]); // Restore
-            }
-            if (animationProgress <= 0) {
-                animationProgress = 0;
-                isAnimating = false;
-                foldButton.textContent = "Unfold";
-            }
-        }
-        
-        const progressStage1 = Math.min(1, animationProgress);
-        const progressStage2 = Math.max(0, animationProgress - 1);
-        const easedProgress1 = (1 - Math.cos(progressStage1 * Math.PI)) / 2; // Cube folding
-        const easedProgress2 = (1 - Math.cos(progressStage2 * Math.PI)) / 2; // Tesseract folding
-        
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const scale = parseFloat(sliders.zoom.value) * (canvas.height / 800);
-        const angles = isAnimating ? { xw: 0.436, yw: 0.262, xy:0, xz:0, yz:0, zw:0 } : { xy: parseFloat(sliders.xy.value), xz: parseFloat(sliders.xz.value), xw: parseFloat(sliders.xw.value), yz: parseFloat(sliders.yz.value), yw: parseFloat(sliders.yw.value), zw: parseFloat(sliders.zw.value) };
-
-        const animatedPoints = points.map(p => {
-            let transformed = { ...p };
-
-            // Stage 2: 4D to 3D folding (done first in reverse logic)
-            const angle4D = (Math.PI/2) * (1 - easedProgress2);
-            if (transformed.x === 1) rotate(transformed, angle4D, 'x', 'w');
-            if (transformed.x === -1) rotate(transformed, -angle4D, 'x', 'w');
-            if (transformed.y === 1) rotate(transformed, angle4D, 'y', 'w');
-            if (transformed.y === -1) rotate(transformed, -angle4D, 'y', 'w');
-            if (transformed.z === 1) rotate(transformed, angle4D, 'z', 'w');
-            if (transformed.z === -1) rotate(transformed, -angle4D, 'z', 'w');
-            
-            // Stage 1: 3D to 2D folding
-            const angle3D = (Math.PI/2) * (1 - easedProgress1);
-            cubeNetMap.forEach(map => {
-                if (transformed[map.face] === map.dir) {
-                     rotate(transformed, map.pivotEdge * angle3D, map.pivotAxis, map.face);
-                }
-            });
-
-            return transformed;
-        });
-
-        const rotatedPoints = animatedPoints.map(p => {
+        const angles = { xy: parseFloat(sliders.xy.value), xz: parseFloat(sliders.xz.value), xw: parseFloat(sliders.xw.value), yz: parseFloat(sliders.yz.value), yw: parseFloat(sliders.yw.value), zw: parseFloat(sliders.zw.value) };
+        
+        const currentShape = shapeSelect.value;
+        const basePoints = currentShape === 'tesseract' ? tesseract_points : cube_points;
+        const currentFaces = currentShape === 'tesseract' ? tesseract_faces : cube_faces;
+        
+        const rotatedPoints = basePoints.map(p => {
             const p_copy = {...p};
             rotate(p_copy, angles.xy, 'x', 'y'); rotate(p_copy, angles.xz, 'x', 'z'); rotate(p_copy, angles.yz, 'y', 'z');
-            rotate(p_copy, angles.xw, 'x', 'w'); rotate(p_copy, angles.yw, 'y', 'w'); rotate(p_copy, angles.zw, 'z', 'w');
+            if(currentShape === 'tesseract') {
+                rotate(p_copy, angles.xw, 'x', 'w'); rotate(p_copy, angles.yw, 'y', 'w'); rotate(p_copy, angles.zw, 'z', 'w');
+            }
             return p_copy;
         });
         
-        if (showProjections) {
+        if (showProjections && currentShape === 'tesseract') {
             const halfW = canvas.width / 2;
             const halfH = canvas.height / 2;
             const orthoScale = scale * 0.75;
-            renderTesseract({x: 0, y: 0, w: halfW, h: halfH, scale: scale, projectionFn: project}, rotatedPoints);
-            renderTesseract({x: halfW, y: 0, w: halfW, h: halfH, scale: orthoScale, projectionFn: projectOrtho, projArgs: ['z', 'y']}, rotatedPoints);
-            renderTesseract({x: 0, y: halfH, w: halfW, h: halfH, scale: orthoScale, projectionFn: projectOrtho, projArgs: ['x', 'z']}, rotatedPoints);
+            renderShape({x: 0, y: 0, w: halfW, h: halfH, scale: scale, projectionFn: project}, rotatedPoints, currentFaces);
+            renderShape({x: halfW, y: 0, w: halfW, h: halfH, scale: orthoScale, projectionFn: projectOrtho, projArgs: ['z', 'y']}, rotatedPoints, currentFaces);
+            renderShape({x: 0, y: halfH, w: halfW, h: halfH, scale: orthoScale, projectionFn: projectOrtho, projArgs: ['x', 'z']}, rotatedPoints, currentFaces);
             
-            ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1; ctx.beginPath();
             ctx.moveTo(halfW, 0); ctx.lineTo(halfW, canvas.height);
             ctx.moveTo(0, halfH); ctx.lineTo(canvas.width, halfH);
             ctx.stroke();
 
         } else {
-            renderTesseract({x: 0, y: 0, w: canvas.width, h: canvas.height, scale: scale, projectionFn: project}, rotatedPoints);
+            renderShape({x: 0, y: 0, w: canvas.width, h: canvas.height, scale: scale, projectionFn: project}, rotatedPoints, currentFaces);
         }
 
-        if (!stopLoopAfterThisFrame && !isAnimating) {
+        if (!stopLoopAfterThisFrame) {
             const dpr = window.devicePixelRatio || 1;
             ctx.fillStyle = '#FFFFFF'; ctx.font = `${16 * dpr}px "Courier New"`; ctx.textAlign = 'left'; ctx.shadowColor = '#FFFFFF'; ctx.shadowBlur = 7;
             const radToDeg = 180 / Math.PI;
-            const rotationInfo = [ `XY: ${(angles.xy * radToDeg).toFixed(1)}°`, `XZ: ${(angles.xz * radToDeg).toFixed(1)}°`, `YZ: ${(angles.yz * radToDeg).toFixed(1)}°`, `XW: ${(angles.xw * radToDeg).toFixed(1)}°`, `YW: ${(angles.yw * radToDeg).toFixed(1)}°`, `ZW: ${(angles.zw * radToDeg).toFixed(1)}°`, ];
+            let rotationInfo = [ `XY: ${(angles.xy * radToDeg).toFixed(1)}°`, `XZ: ${(angles.xz * radToDeg).toFixed(1)}°`, `YZ: ${(angles.yz * radToDeg).toFixed(1)}°` ];
+            if (currentShape === 'tesseract') {
+                rotationInfo.push(`XW: ${(angles.xw * radToDeg).toFixed(1)}°`);
+                rotationInfo.push(`YW: ${(angles.yw * radToDeg).toFixed(1)}°`);
+                rotationInfo.push(`ZW: ${(angles.zw * radToDeg).toFixed(1)}°`);
+            }
             rotationInfo.forEach((text, i) => { ctx.fillText(text, 15, 25 + (i * 20 * dpr)); });
         } else if(stopLoopAfterThisFrame) {
              const dpr = window.devicePixelRatio || 1;
             ctx.fillStyle = '#FFFFFF'; ctx.font = `${16 * dpr}px "Courier New"`; ctx.textAlign = 'left'; ctx.shadowColor = '#FFFFFF'; ctx.shadowBlur = 7;
             const radToDeg = 180 / Math.PI;
-            const rotationInfo = [ `XY: ${(angles.xy * radToDeg).toFixed(1)}°`, `XZ: ${(angles.xz * radToDeg).toFixed(1)}°`, `YZ: ${(angles.yz * radToDeg).toFixed(1)}°`, `XW: ${(angles.xw * radToDeg).toFixed(1)}°`, `YW: ${(angles.yw * radToDeg).toFixed(1)}°`, `ZW: ${(angles.zw * radToDeg).toFixed(1)}°`, ];
+            let rotationInfo = [ `XY: ${(angles.xy * radToDeg).toFixed(1)}°`, `XZ: ${(angles.xz * radToDeg).toFixed(1)}°`, `YZ: ${(angles.yz * radToDeg).toFixed(1)}°` ];
+             if (currentShape === 'tesseract') {
+                rotationInfo.push(`XW: ${(angles.xw * radToDeg).toFixed(1)}°`);
+                rotationInfo.push(`YW: ${(angles.yw * radToDeg).toFixed(1)}°`);
+                rotationInfo.push(`ZW: ${(angles.zw * radToDeg).toFixed(1)}°`);
+            }
             rotationInfo.forEach((text, i) => { ctx.fillText(text, 15, 25 + (i * 20 * dpr)); });
         }
         
@@ -569,9 +558,11 @@
              requestAnimationFrame(() => draw(false));
         }
     }
-
+    
+    // Initial UI setup
+    shapeSelect.dispatchEvent(new Event('change'));
     draw(false);
 </script>
 
 </body>
-</html>```
+</html>
